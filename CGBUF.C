@@ -6,11 +6,9 @@
 
 typedef struct cgbuf {
 	char *buf;
-	char *gs;
-	char *ge;
 	size_t alloc;
-	size_t len;
-	size_t displen;
+	size_t pre_len;
+	size_t post_len;
 } CGBuf;
 
 /*** end header ***/
@@ -19,17 +17,21 @@ typedef struct cgbuf {
 #define CGBUF_GAP_MARKER (-1)
 #define CGBUF_BLANK (' ')
 
+#define cgbuf_gs(b)     &b->buf[b->pre_len]
+#define cgbuf_ge(b)     &b->buf[b->alloc - b->post_len]
+#define cgbuf_len(b)    (b->pre_len + b->post_len)
+#define cgbuf_glen(b)   (b->alloc - cgbuf_len(b))
+
 static void _alloc(CGBuf *cgbuf, size_t min) {
 	size_t alloc = CGBUF_GAP_INIT_ALLOC;
 
 	while (alloc <= min)
 		alloc *= 2;
 
-	cgbuf->gs = cgbuf->buf = malloc(alloc);
+	cgbuf->buf = malloc(alloc);
 	cgbuf->alloc = alloc;
+	cgbuf->pre_len = cgbuf->post_len = 0;
 	memset(cgbuf->buf, CGBUF_GAP_MARKER, alloc);
-
-	cgbuf->ge = &cgbuf->buf[alloc];
 }
 
 void cgbuf_init(CGBuf *cgbuf, const char *text, size_t len) {
@@ -39,23 +41,18 @@ void cgbuf_init(CGBuf *cgbuf, const char *text, size_t len) {
 
 	if (len) {
 		_alloc(cgbuf, len);
-		memcpy(cgbuf->ge - len, text, len);
-		cgbuf->ge -= len;
-
-		cgbuf->len = len;
-		cgbuf->displen = 0;
-		for (i = 0; i < len; i++)
-			cgbuf->displen += (2 - isprint(cgbuf->ge[i]));
+		cgbuf->post_len = len;
+		memcpy(cgbuf_ge(cgbuf), text, len);
 	}
 	else
 		memset(cgbuf, 0, sizeof *cgbuf);
 }
 
 void cgbuf_ensure(CGBuf *cgbuf, size_t extra) {
-	size_t alloc, pre_len, post_len;
-	char *buf, *gs, *ge;
+	size_t alloc;
+	char *buf;
 
-	if (cgbuf->alloc > cgbuf->len + extra)
+	if (cgbuf->alloc > cgbuf_len(cgbuf) + extra)
 		return;
 
 	if (cgbuf->alloc == 0) {
@@ -64,26 +61,22 @@ void cgbuf_ensure(CGBuf *cgbuf, size_t extra) {
 	}
 
 	alloc = cgbuf->alloc;
-	while (alloc < cgbuf->len + extra)
+	while (alloc < cgbuf_len(cgbuf) + extra)
 		alloc *= 2;
 
 	buf = malloc(alloc);
 
-	pre_len = cgbuf->gs - cgbuf->buf;
-	memcpy(buf, cgbuf->buf, pre_len);
-	gs = &buf[pre_len];
+	if (cgbuf->pre_len)
+		memcpy(buf, cgbuf->buf, cgbuf->pre_len);
 
-	post_len = cgbuf->alloc - (cgbuf->ge - cgbuf->buf);
-	ge = &buf[alloc - post_len];
-	memcpy(ge, cgbuf->ge, post_len);
-
-	memset(gs, CGBUF_GAP_MARKER, ge - gs);
+	if (cgbuf->post_len)
+		memcpy(buf + alloc - cgbuf->post_len,
+			   cgbuf_ge(cgbuf), cgbuf->post_len);
 
 	free(cgbuf->buf);
 	cgbuf->buf = buf;
-	cgbuf->gs = gs;
-	cgbuf->ge = ge;
 	cgbuf->alloc = alloc;
+	memset(cgbuf_gs(cgbuf), CGBUF_GAP_MARKER, cgbuf_glen(cgbuf));
 }
 
 void cgbuf_pad(CGBuf *cgbuf, int c, size_t n) {
@@ -92,43 +85,42 @@ void cgbuf_pad(CGBuf *cgbuf, int c, size_t n) {
 
 	cgbuf_ensure(cgbuf, n);
 
-	/* FIXME this is broken if gap is at end of alloc */
-	memmove(cgbuf->ge - n, cgbuf->ge, n);
-	memset(cgbuf->ge, c, n);
-	cgbuf->ge -= n;
+	if (cgbuf->post_len)
+		memmove(cgbuf_ge(cgbuf) - n, cgbuf_ge(cgbuf), cgbuf->post_len);
+
+	memset(cgbuf_ge(cgbuf), c, n);
+	cgbuf->post_len += n;
 }
 
 void cgbuf_setcursor(CGBuf *cgbuf, size_t column) {
-	char *point = &cgbuf->buf[column];
 	size_t len;
 
-	if (column > cgbuf->len)
-		cgbuf_pad(cgbuf, CGBUF_BLANK, column - cgbuf->len);
+	if (column > cgbuf_len(cgbuf))
+		cgbuf_pad(cgbuf, CGBUF_BLANK, column - cgbuf_len(cgbuf));
 
-	if (point == cgbuf->gs)
+	if (column == cgbuf->pre_len)
 		return;
 
-	if (point < cgbuf->gs) {
-		len = cgbuf->gs - point;
-		cgbuf->ge -= len;
-		memmove(cgbuf->ge, point, len);
-		cgbuf->gs = point;
+	if (column < cgbuf->pre_len) {
+		len = cgbuf->pre_len - column;
+		memmove(cgbuf_ge(cgbuf) - len, &cgbuf->buf[column], len);
+		cgbuf->pre_len -= len;
+		cgbuf->post_len += len;
 	}
 	else {
-		/* FIXME this might be broken if gap is at end of alloc */
-		len = point - cgbuf->gs;
-		memmove(cgbuf->gs, cgbuf->ge, len);
-		cgbuf->gs = point;
-		cgbuf->ge += len;
+		len = column - cgbuf->pre_len;
+		memmove(cgbuf_gs(cgbuf), cgbuf_ge(cgbuf), len);
+		cgbuf->pre_len += len;
+		cgbuf->post_len -= len;
 	}
 
-	memset(cgbuf->gs, CGBUF_GAP_MARKER, cgbuf->ge - cgbuf->gs);
+	memset(cgbuf_gs(cgbuf), CGBUF_GAP_MARKER, cgbuf_glen(cgbuf));
 }
 
 void cgbuf_insertc(CGBuf *cgbuf, int c) {
 	cgbuf_ensure(cgbuf, 1);
 
-	*(cgbuf->gs++) = c;
+	cgbuf->buf[cgbuf->pre_len++] = c;
 }
 
 void cgbuf_insert(CGBuf *cgbuf, const char *text, size_t len) {
@@ -141,13 +133,11 @@ void cgbuf_insert(CGBuf *cgbuf, const char *text, size_t len) {
 	cgbuf_ensure(cgbuf, len);
 
 	if (len == 1)
-		*(cgbuf->gs++) = *text;
+		cgbuf->buf[cgbuf->pre_len++] = *text;
 	else {
-		memcpy(cgbuf->gs, text, len);
-		cgbuf->gs += len;
+		memcpy(cgbuf_gs(cgbuf), text, len);
+		cgbuf->pre_len += len;
 	}
-
-	cgbuf->len += len;
 }
 
 void cgbuf_append(CGBuf *cgbuf, const char *text, size_t len) {
@@ -159,10 +149,8 @@ void cgbuf_append(CGBuf *cgbuf, const char *text, size_t len) {
 
 	cgbuf_ensure(cgbuf, len);
 
-	/* FIXME this is broken when gap is at end of alloc */
-	memmove(cgbuf->ge - len, cgbuf->ge, len);
-	memcpy(cgbuf->ge, text, len);
-	cgbuf->ge -= len;
-
-	cgbuf->len += len;
+	if (cgbuf->post_len)
+		memmove(cgbuf_ge(cgbuf) - len, cgbuf_ge(cgbuf), cgbuf->post_len);
+	memcpy(cgbuf_ge(cgbuf), text, len);
+	cgbuf->post_len += len;
 }
