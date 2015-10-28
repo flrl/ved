@@ -82,24 +82,11 @@ void cgbuf_ensure(CGBuf *cgbuf, size_t extra) {
 	_markgap(cgbuf);
 }
 
-void cgbuf_pad(CGBuf *cgbuf, int c, size_t n) {
-	if (n == 0)
-		return;
-
-	cgbuf_ensure(cgbuf, n);
-
-	if (cgbuf->post_len)
-		memmove(cgbuf_ge(cgbuf) - n, cgbuf_ge(cgbuf), cgbuf->post_len);
-
-	memset(cgbuf_ge(cgbuf), c, n);
-	cgbuf->post_len += n;
-}
-
 void cgbuf_setcursor(CGBuf *cgbuf, size_t column) {
 	size_t len;
 
 	if (column > cgbuf_len(cgbuf))
-		cgbuf_pad(cgbuf, CGBUF_BLANK, column - cgbuf_len(cgbuf));
+		cgbuf_appendc(cgbuf, CGBUF_BLANK, column - cgbuf_len(cgbuf));
 
 	if (column == cgbuf->pre_len)
 		return;
@@ -120,10 +107,11 @@ void cgbuf_setcursor(CGBuf *cgbuf, size_t column) {
 	_markgap(cgbuf);
 }
 
-void cgbuf_insertc(CGBuf *cgbuf, int c) {
-	cgbuf_ensure(cgbuf, 1);
+void cgbuf_insertc(CGBuf *cgbuf, int c, size_t n) {
+	cgbuf_ensure(cgbuf, n);
 
-	cgbuf->buf[cgbuf->pre_len++] = c;
+	while (n--)
+		cgbuf->buf[cgbuf->pre_len++] = c;
 }
 
 void cgbuf_insert(CGBuf *cgbuf, const char *text, size_t len) {
@@ -143,6 +131,19 @@ void cgbuf_insert(CGBuf *cgbuf, const char *text, size_t len) {
 	}
 }
 
+void cgbuf_appendc(CGBuf *cgbuf, int c, size_t n) {
+	if (n == 0)
+		return;
+
+	cgbuf_ensure(cgbuf, n);
+
+	if (cgbuf->post_len)
+		memmove(cgbuf_ge(cgbuf) - n, cgbuf_ge(cgbuf), cgbuf->post_len);
+
+	memset(cgbuf_ge(cgbuf), c, n);
+	cgbuf->post_len += n;
+}
+
 void cgbuf_append(CGBuf *cgbuf, const char *text, size_t len) {
 	if (len == 0)
 		len = strlen(text);
@@ -156,6 +157,33 @@ void cgbuf_append(CGBuf *cgbuf, const char *text, size_t len) {
 		memmove(cgbuf_ge(cgbuf) - len, cgbuf_ge(cgbuf), cgbuf->post_len);
 	memcpy(cgbuf_ge(cgbuf), text, len);
 	cgbuf->post_len += len;
+}
+
+void cgbuf_prependc(CGBuf *cgbuf, int c, size_t n) {
+	if (n == 0)
+		return;
+
+	cgbuf_ensure(cgbuf, n);
+
+	if (cgbuf->pre_len)
+		memmove(cgbuf->buf + n, cgbuf->buf, cgbuf->pre_len);
+	memset(cgbuf->buf, c, n);
+	cgbuf->pre_len += n;
+}
+
+void cgbuf_prepend(CGBuf *cgbuf, const char *text, size_t len) {
+	if (len == 0)
+		len = strlen(text);
+
+	if (len == 0)
+		return;
+
+	cgbuf_ensure(cgbuf, len);
+
+	if (cgbuf->pre_len)
+		memmove(cgbuf->buf + len, cgbuf->buf, cgbuf->pre_len);
+	memcpy(cgbuf->buf, text, len);
+	cgbuf->pre_len += len;
 }
 
 const char *cgbuf_string(CGBuf *cgbuf, char *dest, size_t len) {
