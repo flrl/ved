@@ -96,4 +96,13 @@ void lgbuf_setcursor(LGBuf *lgbuf, size_t line) {
 		lgbuf->pre_len += len;
 		lgbuf->post_len -= len;
 	}
+}
+
+void lgbuf_insertl(LGBuf *lgbuf, const char *text, size_t len) {
+	lgbuf_ensure(lgbuf, 1);
+
+	if (text)
+		cgbuf_insert(lgbuf_gs(lgbuf), text, len);
+
+	lgbuf->pre_len++;
 }
