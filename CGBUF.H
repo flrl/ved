@@ -16,6 +16,8 @@ void cgbuf_ensure(CGBuf *cgbuf, size_t extra);
 void cgbuf_setcursor(CGBuf *cgbuf, size_t column);
 void cgbuf_insertc(CGBuf *cgbuf, int c, size_t n);
 void cgbuf_insert(CGBuf *cgbuf, const char *text, size_t len);
+void cgbuf_deletef(CGBuf *cgbuf, size_t n);
+void cgbuf_deleteb(CGBuf *cgbuf, size_t n);
 void cgbuf_appendc(CGBuf *cgbuf, int c, size_t n);
 void cgbuf_append(CGBuf *cgbuf, const char *text, size_t len);
 void cgbuf_prependc(CGBuf *cgbuf, int c, size_t n);

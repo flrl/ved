@@ -131,6 +131,24 @@ void cgbuf_insert(CGBuf *cgbuf, const char *text, size_t len) {
 	}
 }
 
+void cgbuf_deletef(CGBuf *cgbuf, size_t n) {
+	if (n > cgbuf->post_len)
+		cgbuf->post_len = 0;
+	else
+		cgbuf->post_len -= n;
+
+	_markgap(cgbuf);
+}
+
+void cgbuf_deleteb(CGBuf *cgbuf, size_t n) {
+	if (n > cgbuf->pre_len)
+		cgbuf->pre_len = 0;
+	else
+		cgbuf->pre_len -= n;
+
+	_markgap(cgbuf);
+}
+
 void cgbuf_appendc(CGBuf *cgbuf, int c, size_t n) {
 	if (n == 0)
 		return;
