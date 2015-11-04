@@ -78,8 +78,10 @@ void lgbuf_ensure(LGBuf *lgbuf, size_t extra) {
 void lgbuf_setcursor(LGBuf *lgbuf, size_t line) {
 	size_t len;
 
+	/** FIXME ***
 	if (line > lgbuf_len(lgbuf))
 		lgbuf_pad(lgbuf, NULL, line - lgbuf_len(lgbuf));
+	*/
 
 	if (line == lgbuf->pre_len)
 		return;
